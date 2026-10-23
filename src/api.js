@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://mate.academy/students-api",
+  baseURL: "https://mate-academy.github.io/fe-students-api",
 });
 
 export const getUsers = () => api.get("/users");
