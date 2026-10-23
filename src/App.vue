@@ -1,5 +1,7 @@
 <script setup>
 import { onMounted, ref, watch } from "vue";
+import Loader from "./components/Loader.vue";
+import CommentForm from "./components/CommentForm.vue";
 import {
   getUsers,
   getPosts,
@@ -26,13 +28,19 @@ const savingComment = ref(false);
 
 const error = ref("");
 const commentsError = ref("");
+const commentFieldErrors = ref({
+  name: "",
+  email: "",
+  body: "",
+});
+
+const clearBodyKey = ref(0);
 const postError = ref("");
 const commentError = ref("");
 
 const sidebarOpen = ref(false);
 const formMode = ref("");
 const postForm = ref({ title: "", body: "" });
-const commentForm = ref({ name: "", email: "", body: "" });
 const commentFormOpen = ref(false);
 
 async function loadUsers() {
@@ -192,20 +200,53 @@ function closeSidebar() {
 function openCommentForm() {
   commentFormOpen.value = true;
   commentError.value = "";
+  commentFieldErrors.value = {
+    name: "",
+    email: "",
+    body: "",
+  };
 }
 
-async function saveComment() {
+function clearCommentFieldError(field) {
+  if (Object.hasOwn(commentFieldErrors.value, field)) {
+    commentFieldErrors.value[field] = "";
+  }
+
   commentError.value = "";
+}
+async function saveComment(form) {
+  commentError.value = "";
+  commentFieldErrors.value = {
+    name: "",
+    email: "",
+    body: "",
+  };
 
-  const { name, email, body } = commentForm.value;
+  const { name, email, body } = form;
 
-  if (!name.trim() || !email.trim() || !body.trim()) {
-    commentError.value = "Name, email, and comment are required.";
+  if (!name.trim()) {
+    commentFieldErrors.value.name = "Name is required.";
+  }
+
+  if (!email.trim()) {
+    commentFieldErrors.value.email = "Email is required.";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    commentFieldErrors.value.email = "Enter a valid email address.";
+  }
+
+  if (!body.trim()) {
+    commentFieldErrors.value.body = "Comment is required.";
+  }
+
+  if (
+    Object.values(commentFieldErrors.value).some(
+      (fieldError) => fieldError !== "",
+    )
+  ) {
     return;
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    commentError.value = "Enter a valid email address.";
+  if (!selectedPost.value) {
     return;
   }
 
@@ -220,8 +261,12 @@ async function saveComment() {
     });
 
     comments.value.push(response.data);
-    commentForm.value.body = "";
-    commentError.value = "";
+    clearBodyKey.value += 1;
+    commentFieldErrors.value = {
+      name: "",
+      email: "",
+      body: "",
+    };
   } catch {
     commentError.value = "Could not add comment. Please try again.";
   } finally {
@@ -279,9 +324,10 @@ onMounted(loadUsers);
         </div>
       </div>
 
-      <div v-if="loadingUsers || loadingPosts" class="notification is-info">
-        Loading...
-      </div>
+      <Loader
+        v-if="loadingUsers || loadingPosts"
+        label="Loading users and posts..."
+      />
 
       <div v-else-if="error" class="notification is-danger">
         {{ error }}
@@ -331,8 +377,12 @@ onMounted(loadUsers);
     </div>
   </section>
 
-  <div v-if="sidebarOpen" class="sidebar-backdrop" @click.self="closeSidebar">
-    <aside class="post-sidebar">
+  <div
+    class="sidebar-backdrop"
+    :class="{ 'Sidebar--open': sidebarOpen }"
+    @click.self="closeSidebar"
+  >
+    <aside class="post-sidebar" :class="{ 'Sidebar--open': sidebarOpen }">
       <button
         class="delete sidebar-close"
         aria-label="Close sidebar"
@@ -418,9 +468,7 @@ onMounted(loadUsers);
         <hr />
         <h3 class="title is-5">Comments</h3>
 
-        <p v-if="loadingComments" class="notification is-info">
-          Loading comments...
-        </p>
+        <Loader v-if="loadingComments" label="Loading comments..." />
 
         <div v-else-if="commentsError" class="notification is-danger">
           {{ commentsError }}
@@ -453,63 +501,14 @@ onMounted(loadUsers);
         </article>
 
         <template v-if="commentFormOpen">
-          <h4 class="title is-6 mt-4">Write a comment</h4>
-
-          <form @submit.prevent="saveComment">
-            <div class="field">
-              <label class="label" for="comment-name">Name</label>
-              <input
-                id="comment-name"
-                v-model="commentForm.name"
-                class="input"
-              />
-            </div>
-
-            <div class="field">
-              <label class="label" for="comment-email">Email</label>
-              <input
-                id="comment-email"
-                v-model="commentForm.email"
-                class="input"
-                type="text"
-              />
-            </div>
-
-            <div class="field">
-              <label class="label" for="comment-body">Comment</label>
-              <textarea
-                id="comment-body"
-                v-model="commentForm.body"
-                class="textarea"
-              />
-            </div>
-
-            <p v-if="commentError" class="help is-danger mb-3">
-              {{ commentError }}
-            </p>
-
-            <div class="buttons">
-              <button
-                class="button is-link"
-                :class="{ 'is-loading': savingComment }"
-                :disabled="savingComment"
-                type="submit"
-              >
-                Submit
-              </button>
-              <button
-                class="button"
-                type="button"
-                :disabled="savingComment"
-                @click="
-                  commentForm = { name: '', email: '', body: '' };
-                  commentError = '';
-                "
-              >
-                Clear
-              </button>
-            </div>
-          </form>
+          <CommentForm
+            :loading="savingComment"
+            :error="commentError"
+            :field-errors="commentFieldErrors"
+            :clear-body-key="clearBodyKey"
+            @submit="saveComment"
+            @field-change="clearCommentFieldError"
+          />
         </template>
 
         <button
